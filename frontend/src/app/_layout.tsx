@@ -11,13 +11,22 @@ import { AuthProvider, useAuth } from '@/lib/auth-context';
 
 SplashScreen.preventAutoHideAsync();
 
+/** Per-role home, used as the signed-in landing group. */
+function homeFor(type: 'customer' | 'cashier' | 'admin' | undefined) {
+  if (type === 'admin') return '(owner)' as const;
+  if (type === 'cashier') return '(cashier)' as const;
+  return '(customer)' as const;
+}
+
 function RootNavigator() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const theme = Colors.light;
 
   if (status === 'loading') {
     return null;
   }
+
+  const home = homeFor(user?.type);
 
   return (
     <Stack
@@ -35,39 +44,12 @@ function RootNavigator() {
         <Stack.Screen name="verify-phone" />
         <Stack.Screen name="forgot-password" />
       </Stack.Protected>
+
       <Stack.Protected guard={status === 'signedIn'}>
-        {/* Signing in swaps the whole group, so a cross-fade reads better than a push. */}
-        <Stack.Screen name="dashboard" options={{ animation: 'fade' }} />
-        <Stack.Screen name="menu" />
-        <Stack.Screen name="cart" />
-        <Stack.Screen name="checkout" />
-        <Stack.Screen name="orders" />
-        <Stack.Screen name="order-detail" />
-        <Stack.Screen name="order-chat" />
-        <Stack.Screen name="cashier-orders" />
-        <Stack.Screen name="staff-order-detail" />
-        <Stack.Screen name="cashier-counter" />
-        <Stack.Screen name="cashier-counter-create" />
-        <Stack.Screen name="owner-products" />
-        <Stack.Screen name="product-form" />
-        <Stack.Screen name="owner-dashboard" />
-        <Stack.Screen name="owner-inventory" />
-        <Stack.Screen name="owner-categories" />
-        <Stack.Screen name="owner-ingredients" />
-        <Stack.Screen name="owner-cashiers" />
-        <Stack.Screen name="owner-reports" />
-        <Stack.Screen name="owner-promos" />
-        <Stack.Screen name="notifications" />
-        <Stack.Screen name="customer-promos" />
-        <Stack.Screen name="promo-detail" />
-        <Stack.Screen name="rewards" />
-        <Stack.Screen name="reviews" />
-        <Stack.Screen name="create-review" />
-        <Stack.Screen name="support" />
-        <Stack.Screen name="support-admin" />
-        <Stack.Screen name="support-chat" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="profile" />
+        {/* Signing in swaps the whole group, so a cross-fade reads better than a push.
+            Only the signed-in role's group is registered, so deep links into another
+            role's routes simply don't resolve. */}
+        <Stack.Screen name={home} options={{ animation: 'fade' }} />
       </Stack.Protected>
     </Stack>
   );
