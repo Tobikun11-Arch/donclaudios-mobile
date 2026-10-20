@@ -128,8 +128,8 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   image: {
-    width: 76,
-    height: 71,
+    width: 200,
+    height: 200,
   },
   background: {
     borderRadius: 40,
