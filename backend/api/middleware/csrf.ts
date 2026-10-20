@@ -56,6 +56,10 @@ export function csrfProtection(
     return next();
   }
 
+  if (req.originalUrl.startsWith('/api/auth/')) {
+    return next();
+  }
+
   if (!req.headers.cookie) {
     return next();
   }

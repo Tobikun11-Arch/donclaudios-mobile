@@ -1,7 +1,6 @@
 import {Request, Response, NextFunction} from 'express';
 import {ApiError} from '../utils/error';
 import {logger} from '../logging/logger';
-import {ErrorCodes} from '../constants/errorCodes';
 
 export function errorHandler(
   err: Error,
@@ -21,7 +20,7 @@ export function errorHandler(
   logger.error({err}, 'Unhandled error');
   res.status(500).json({
     success: false,
-      code: ErrorCodes.INTERNAL_ERROR,
+    code: 'INTERNAL_ERROR',
     message: 'Unexpected error occurred',
     details: 'An unexpected error occurred'
   });

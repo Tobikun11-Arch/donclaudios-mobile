@@ -1,57 +1,50 @@
 import rateLimit from 'express-rate-limit';
-import type {RequestHandler} from 'express';
 
-const enabled = process.env.RATE_LIMIT_ENABLED !== 'false';
-const noop: RequestHandler = (_req, _res, next) => next();
+// Local development escape hatch — set RATE_LIMIT_ENABLED=false in .env while
+// testing against your phone so a few failed logins don't lock the IP out for
+// 15 minutes. Production leaves it unset and keeps the real limits.
+const rateLimitingDisabled = process.env.RATE_LIMIT_ENABLED === 'false';
+const skip = () => rateLimitingDisabled;
 
-function makeLimiter(opts: Parameters<typeof rateLimit>[0]): RequestHandler {
-  return enabled ? (rateLimit(opts) as RequestHandler) : noop;
-}
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 15,                  
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip
+});
 
-const rateLimitHandler: RequestHandler = (_req, res) => {
-  res.status(429).json({
-    success: false,
-    code: 'RATE_LIMIT_EXCEEDED',
-    message: 'Too many requests. Please try again later.'
-  });
-};
-
-export const authLimiter = makeLimiter({
+export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: rateLimitHandler
+  skip
 });
 
-export const authActionLimiter = makeLimiter({
+export const sessionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip
+});
+
+export const guestOtpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: rateLimitHandler
+  skip
 });
 
-export const authReadLimiter = makeLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 50,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler
-});
-
-export const uploadLimiter = makeLimiter({
-  windowMs: 15 * 60 * 1000,
+// Keyed by IP like the other limiters, so the ceiling is generous enough for
+// several walk-in customers sharing one network. It only exists to stop a
+// single source from spamming submissions.
+export const reviewLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: rateLimitHandler
-});
-
-export const defaultLimiter = makeLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler
+  skip
 });

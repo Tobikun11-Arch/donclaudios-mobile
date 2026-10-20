@@ -5,14 +5,11 @@ export interface BaseUserDocument extends mongoose.Document {
   lastName: string;
   email: string;
   passwordHash: string;
-  username?: string;
+  phoneNumber?: string;
+  address?: string;
   isVerified: boolean;
   verificationCode?: string | null;
   verificationExpiry?: Date | null;
-  resetCode?: string | null;
-  resetExpiry?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export function createBaseUserSchema<T extends BaseUserDocument>() {
@@ -28,15 +25,16 @@ export function createBaseUserSchema<T extends BaseUserDocument>() {
         trim: true
       },
       passwordHash: {type: String, required: true},
-      username: {type: String, unique: true, sparse: true},
+      phoneNumber: {type: String},
+      address: {type: String},
       isVerified: {type: Boolean, default: false},
       verificationCode: {type: String, default: null},
-      verificationExpiry: {type: Date, default: null},
-      resetCode: {type: String, default: null},
-      resetExpiry: {type: Date, default: null}
+      verificationExpiry: {type: Date, default: null}
     },
     {timestamps: true}
   );
+
+  schema.index({phoneNumber: 1}, {unique: true, sparse: true});
 
   return schema;
 }

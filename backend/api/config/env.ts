@@ -16,7 +16,16 @@ const envSchema = z.object({
   SMTP_FROM: z.string().optional(),
   COOKIE_SECURE: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).optional(),
-  CORS_ORIGINS: z.string().optional()
+  CORS_ORIGINS: z.string().optional(),
+  IPROG_SMS_API_TOKEN: z.string().optional(),
+  IPROG_SMS_API_BASE_URL: z
+    .string()
+    .url()
+    .default('https://www.iprogsms.com/api/v1')
+    .optional(),
+  IPROG_SMS_PROVIDER: z.coerce.number().int().default(2),
+  GUEST_OTP_CODE_MINUTES: z.coerce.number().int().min(1).default(5),
+  GUEST_OTP_VERIFIED_DAYS: z.coerce.number().int().min(1).default(30)
 });
 
 const parsed = envSchema.safeParse(process.env);

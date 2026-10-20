@@ -6,7 +6,7 @@ type VerificationCodeEmailParams = {
 };
 
 export function verificationCodeEmailTemplate({
-  appName = 'your app name',
+  appName = 'DonClaudios',
   code,
   expiresMinutes,
   recipientName

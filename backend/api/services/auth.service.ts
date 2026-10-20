@@ -1,76 +1,81 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import {env} from '../config/env';
-import {userRepository} from '../repositories/user.repository';
+import {customerRepository} from '../repositories/customer.repository';
+import {cashierRepository} from '../repositories/cashier.repository';
 import {adminRepository} from '../repositories/admin.repository';
 import {ApiError} from '../utils/error';
 import {emailService} from './email.service';
+import {smsService} from './sms.service';
 import {blocklistService} from './blocklist.service';
-import {logger} from '../logging/logger';
-import {ErrorCodes} from '../constants/errorCodes';
-import {verificationCodeEmailTemplate} from '../templates/verificationCodeEmail';
 import {resetPasswordEmailTemplate} from '../templates/resetPasswordEmail';
+import {verificationCodeEmailTemplate} from '../templates/verificationCodeEmail';
+import {
+  generateVerificationCode,
+  getVerificationExpiry
+} from '../utils/verification';
 
-function generateVerificationCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-function getVerificationExpiry(minutes: number) {
-  return new Date(Date.now() + minutes * 60 * 1000);
-}
-
-type RefreshTokenPayload = {
-  userId: string;
-  type: 'user' | 'admin';
-};
-
-function sendEmailInBackground(params: {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
+function sendVerificationCodeInBackground(params: {
+  to?: string | null;
+  phoneNumber?: string | null;
+  code: string;
+  firstName?: string;
 }) {
-  emailService.sendEmail(params).catch(error => {
-    logger.error({err: error}, 'Failed to send email in background');
-  });
+  // Email is the reliable channel (works for every account with an address).
+  // SMS needs IPROG_SMS_API_TOKEN, so it's best-effort only.
+  if (params.to) {
+    const tpl = verificationCodeEmailTemplate({
+      code: params.code,
+      expiresMinutes: 10,
+      recipientName: params.firstName
+    });
+    emailService
+      .sendEmail({to: params.to, subject: tpl.subject, text: tpl.text, html: tpl.html})
+      .catch(err => {
+        // eslint-disable-next-line no-console
+        console.error('Failed to send verification email', err?.message);
+      });
+  }
+
+  if (params.phoneNumber) {
+    smsService
+      .sendVerificationSms({
+        phoneNumber: params.phoneNumber,
+        code: params.code,
+        expiresMinutes: 10
+      })
+      .catch(err => {
+        // eslint-disable-next-line no-console
+        console.error('Failed to send verification SMS', err?.message);
+      });
+  }
 }
 
 export const authService = {
-  async me(userId: string, type: 'user' | 'admin' = 'user') {
-    const repository = type === 'user' ? userRepository : adminRepository;
-    const account = await repository.findById(userId);
-
-    if (!account) {
-      throw new ApiError(404, ErrorCodes.USER_NOT_FOUND, 'User not found');
-    }
-
-    return {
-      id: account.id,
-      firstName: account.firstName,
-      lastName: account.lastName,
-      email: account.email,
-      username: account.username,
-      isVerified: account.isVerified,
-      createdAt: account.createdAt,
-      type
-    };
-  },
-
   async register(data: {
     firstName: string;
     lastName: string;
     email: string;
     password: string;
-    username: string;
-    phoneNumber?: string;
-    address?: string;
+    phoneNumber: string;
+    address: string;
   }) {
-    const [existingEmail] = await Promise.all([
-      userRepository.findByEmail(data.email)
-    ]);
+    const existingEmail = await customerRepository.findByEmail(data.email);
 
     if (existingEmail) {
-          throw new ApiError(409, ErrorCodes.EMAIL_EXISTS, 'Email already exists');
+      throw new ApiError(409, 'EMAIL_EXISTS', 'Email already exists');
+    }
+
+    if (data.phoneNumber) {
+      const [customerPhone, cashierPhone, adminPhone] = await Promise.all([
+        customerRepository.findByPhoneNumber(data.phoneNumber),
+        cashierRepository.findByPhoneNumber(data.phoneNumber),
+        adminRepository.findByPhoneNumber(data.phoneNumber)
+      ]);
+
+      if (customerPhone || cashierPhone || adminPhone) {
+        throw new ApiError(409, 'PHONE_EXISTS', 'Phone number already exists');
+      }
     }
 
     try {
@@ -78,12 +83,11 @@ export const authService = {
       const verificationCode = generateVerificationCode();
       const verificationExpiry = getVerificationExpiry(10);
 
-      const user = await userRepository.create({
+      const customer = await customerRepository.create({
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
         passwordHash,
-        username: data.username,
         phoneNumber: data.phoneNumber,
         address: data.address,
         verificationCode,
@@ -91,38 +95,48 @@ export const authService = {
         isVerified: false
       });
 
-      const emailTpl = verificationCodeEmailTemplate({
+      sendVerificationCodeInBackground({
+        to: customer.email,
+        phoneNumber: customer.phoneNumber ?? data.phoneNumber,
         code: verificationCode,
-        expiresMinutes: 10,
-        recipientName: data.firstName
+        firstName: customer.firstName
       });
 
-      sendEmailInBackground({
-        to: data.email,
-        subject: emailTpl.subject,
-        text: emailTpl.text,
-        html: emailTpl.html
-      });
+      return {id: customer.id, phoneNumber: customer.phoneNumber};
+    } catch (err: any) {
+      const code = err?.code;
+      const rawMessage = String(err?.message ?? '');
+      const keyPattern = err?.keyPattern;
 
-      return {id: user.id, email: user.email};
-    } catch (err: unknown) {
       if (
-        err instanceof Error &&
-        'code' in err &&
-        (err as {code: number}).code === 11000
+        code === 11000 ||
+        rawMessage.toLowerCase().includes('e11000') ||
+        rawMessage.toLowerCase().includes('duplicate key')
       ) {
-        const keyValue = (err as {keyValue?: Record<string, string>}).keyValue;
+        const isPhone = !!(
+          keyPattern &&
+          typeof keyPattern === 'object' &&
+          'phoneNumber' in keyPattern
+        );
+        const isEmail = !!(
+          keyPattern &&
+          typeof keyPattern === 'object' &&
+          'email' in keyPattern
+        );
 
-        if (keyValue?.username) {
-          throw new ApiError(409, ErrorCodes.USERNAME_EXISTS, 'username already exists');
+        if (isPhone || rawMessage.toLowerCase().includes('phonenumber')) {
+          throw new ApiError(
+            409,
+            'PHONE_EXISTS',
+            'Phone number already exists'
+          );
         }
 
-        if (keyValue?.email) {
-      throw new ApiError(409, ErrorCodes.EMAIL_EXISTS, 'Email already exists');
-
+        if (isEmail || rawMessage.toLowerCase().includes('email')) {
+          throw new ApiError(409, 'EMAIL_EXISTS', 'Email already exists');
         }
 
-        throw new ApiError(409, ErrorCodes.ACCOUNT_EXISTS, 'Account already exists');
+        throw new ApiError(409, 'ACCOUNT_EXISTS', 'Account already exists');
       }
 
       throw err;
@@ -130,52 +144,54 @@ export const authService = {
   },
 
   async verify(identifier: string, code: string) {
-    const user = await userRepository.findByIdentifier(identifier);
+    const customer = await customerRepository.findByEmailOrPhoneNumber(identifier);
 
-    if (!user || !user.verificationCode || !user.verificationExpiry) {
-      throw new ApiError(400, ErrorCodes.INVALID_CODE, 'Invalid verification code');
+    if (
+      !customer ||
+      !customer.verificationCode ||
+      !customer.verificationExpiry
+    ) {
+      throw new ApiError(400, 'INVALID_CODE', 'Invalid verification code');
     }
 
-    const codeMatches = user.verificationCode === code;
-    const notExpired = user.verificationExpiry > new Date();
+    const codeMatches = customer.verificationCode === code;
+    const notExpired = customer.verificationExpiry > new Date();
 
     if (!codeMatches || !notExpired) {
       throw new ApiError(
         400,
-        ErrorCodes.EXPIRED_CODE,
+        'EXPIRED_CODE',
         'Verification code expired or invalid'
       );
     }
 
-    await userRepository.markVerified(user.id);
+    await customerRepository.markVerified(identifier);
   },
 
   async resendVerification(identifier: string) {
-    const user = await userRepository.findByIdentifier(identifier);
-    if (!user || user.isVerified) {
-      return;
+    const customer = await customerRepository.findByEmailOrPhoneNumber(identifier);
+    if (!customer) {
+      throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    if (customer.isVerified) {
+      throw new ApiError(400, 'ALREADY_VERIFIED', 'Account already verified');
     }
 
     const verificationCode = generateVerificationCode();
     const verificationExpiry = getVerificationExpiry(10);
 
-    await userRepository.setVerificationCode(
-      user.id,
+    await customerRepository.setVerificationCode(
+      identifier,
       verificationCode,
       verificationExpiry
     );
 
-    const emailTpl = verificationCodeEmailTemplate({
+    sendVerificationCodeInBackground({
+      to: customer.email,
+      phoneNumber: customer.phoneNumber,
       code: verificationCode,
-      expiresMinutes: 10,
-      recipientName: user.firstName
-    });
-
-    sendEmailInBackground({
-      to: user.email,
-      subject: emailTpl.subject,
-      text: emailTpl.text,
-      html: emailTpl.html
+      firstName: customer.firstName
     });
   },
 
@@ -190,7 +206,7 @@ export const authService = {
       recipientName: params.recipientName
     });
 
-    sendEmailInBackground({
+    await emailService.sendEmail({
       to: params.email,
       subject: emailTpl.subject,
       text: emailTpl.text,
@@ -199,169 +215,179 @@ export const authService = {
   },
 
   async forgotPassword(identifier: string) {
-    const user = await userRepository.findByIdentifier(identifier);
+    const customer = await customerRepository.findByEmailOrPhoneNumber(identifier);
 
-    if (!user || !user.isVerified) return;
+    if (!customer || !customer.isVerified) return;
 
     const resetCode = generateVerificationCode();
     const resetExpiry = getVerificationExpiry(10);
 
-    await userRepository.setResetCode(user.id, resetCode, resetExpiry);
+    await customerRepository.setVerificationCode(identifier, resetCode, resetExpiry);
 
-    authService.sendResetPasswordCodeEmail({
-      email: user.email,
+    await authService.sendResetPasswordCodeEmail({
+      email: customer.email,
       code: resetCode,
-      recipientName: user.firstName
+      recipientName: customer.firstName
     });
   },
 
-  async verifyResetCode(identifier: string, code: string) {
-    const user = await userRepository.findByIdentifier(identifier);
-
-    if (!user || !user.resetCode || !user.resetExpiry) {
-      throw new ApiError(400, ErrorCodes.INVALID_CODE, 'Invalid or expired reset code');
-    }
-
-    const codeMatches = user.resetCode === code;
-    const notExpired = user.resetExpiry > new Date();
-
-    if (!codeMatches || !notExpired) {
-      throw new ApiError(400, ErrorCodes.EXPIRED_CODE, 'Reset code expired or invalid');
-    }
-  },
-
   async resetPassword(identifier: string, code: string, newPassword: string) {
-    const user = await userRepository.findByIdentifier(identifier);
+    const customer = await customerRepository.findByEmailOrPhoneNumber(identifier);
 
-    if (!user || !user.resetCode || !user.resetExpiry) {
-      throw new ApiError(400, ErrorCodes.INVALID_CODE, 'Invalid or expired reset code');
+    if (
+      !customer ||
+      !customer.verificationCode ||
+      !customer.verificationExpiry
+    ) {
+      throw new ApiError(400, 'INVALID_CODE', 'Invalid or expired reset code');
     }
 
-    const codeMatches = user.resetCode === code;
-    const notExpired = user.resetExpiry > new Date();
+    const codeMatches = customer.verificationCode === code;
+    const notExpired = customer.verificationExpiry > new Date();
 
     if (!codeMatches || !notExpired) {
-      throw new ApiError(400, ErrorCodes.EXPIRED_CODE, 'Reset code expired or invalid');
+      throw new ApiError(400, 'EXPIRED_CODE', 'Reset code expired or invalid');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
-    await userRepository.updatePassword(user.id, passwordHash);
-    await userRepository.clearResetCode(user.id);
+    // Clear the code then update the password
+    await customerRepository.clearVerificationCode(identifier);
+    await customerRepository.updateProfile(customer.id, {passwordHash} as any);
+  },
+
+  async login(email: string, password: string) {
+    const identifier = email;
+    const [customer, cashier, admin] = await Promise.all([
+      customerRepository.findByEmailOrPhoneNumber(identifier),
+      cashierRepository.findByEmailOrPhoneNumber(identifier),
+      adminRepository.findByEmailOrPhoneNumber(identifier)
+    ]);
+
+    const candidates: {user: any; type: 'customer' | 'cashier' | 'admin'}[] = [];
+    if (customer) candidates.push({user: customer, type: 'customer'});
+    if (cashier) candidates.push({user: cashier, type: 'cashier'});
+    if (admin) candidates.push({user: admin, type: 'admin'});
+
+    if (candidates.length === 0) {
+      throw new ApiError(
+        401,
+        'INVALID_CREDENTIALS',
+        'Invalid email or password'
+      );
+    }
+
+    const verifiedCandidates = candidates.filter(c => c.user.isVerified);
+    if (verifiedCandidates.length === 0) {
+      throw new ApiError(403, 'NOT_VERIFIED', 'Account not verified');
+    }
+
+    for (const {user, type} of verifiedCandidates) {
+      const match = await bcrypt.compare(password, user.passwordHash);
+      if (!match) continue;
+
+      const accessToken: string = jwt.sign(
+        {userId: user.id, type},
+        env.JWT_SECRET,
+        {expiresIn: '15m'}
+      );
+
+      const refreshToken = jwt.sign(
+        {userId: user.id, type},
+        env.JWT_REFRESH_SECRET,
+        {expiresIn: '7d'}
+      );
+
+      return {accessToken, refreshToken, user, userType: type};
+    }
+
+    throw new ApiError(
+      401,
+      'INVALID_CREDENTIALS',
+      'Invalid email or password'
+    );
+  },
+
+  async refreshAccessToken(refreshToken: string) {
+    try {
+      const payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as {
+        userId: string;
+        type?: 'customer' | 'cashier' | 'admin';
+      };
+
+      const tokenType = payload.type;
+
+      let userType: 'customer' | 'cashier' | 'admin' | null = null;
+      let user: any = null;
+
+      if (tokenType) {
+        userType = tokenType;
+        user = await (tokenType === 'customer'
+          ? customerRepository.findById(payload.userId)
+          : tokenType === 'cashier'
+            ? cashierRepository.findById(payload.userId)
+            : adminRepository.findById(payload.userId));
+      } else {
+        const [customer, cashier, admin] = await Promise.all([
+          customerRepository.findById(payload.userId),
+          cashierRepository.findById(payload.userId),
+          adminRepository.findById(payload.userId)
+        ]);
+
+        user = customer || cashier || admin;
+        userType = customer
+          ? 'customer'
+          : cashier
+            ? 'cashier'
+            : admin
+              ? 'admin'
+              : null;
+      }
+
+      if (!user || !userType) {
+        throw new ApiError(401, 'UNAUTHORIZED', 'Invalid token');
+      }
+
+      if (!user.isVerified) {
+        throw new ApiError(403, 'NOT_VERIFIED', 'Email not verified');
+      }
+
+      const accessToken = jwt.sign(
+        {userId: user.id, type: userType},
+        env.JWT_SECRET,
+        {expiresIn: '15m'}
+      );
+
+      return {accessToken};
+    } catch {
+      throw new ApiError(401, 'UNAUTHORIZED', 'Invalid token');
+    }
   },
 
   async changePassword(
     userId: string,
-    type: 'user' | 'admin',
+    type: 'admin' | 'cashier',
     currentPassword: string,
     newPassword: string
   ) {
-    const repository = type === 'user' ? userRepository : adminRepository;
-    const account = await repository.findById(userId);
-
-    if (!account) {
-      throw new ApiError(404, ErrorCodes.USER_NOT_FOUND, 'User not found');
+    const repo =
+      type === 'cashier' ? cashierRepository : adminRepository;
+    const user = await repo.findById(userId);
+    if (!user) {
+      throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
-    const matches = await bcrypt.compare(currentPassword, account.passwordHash);
-    if (!matches) {
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) {
       throw new ApiError(
-        401,
-        ErrorCodes.INVALID_CREDENTIALS,
+        400,
+        'INVALID_PASSWORD',
         'Current password is incorrect'
       );
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await repository.updatePassword(userId, passwordHash);
-  },
-
-  async login(identifier: string, password: string) {
-    const [user, admin] = await Promise.all([
-      userRepository.findByIdentifier(identifier),
-      adminRepository.findByEmailOrUsername(identifier)
-    ]);
-
-    const account = user || admin;
-    const userType = user ? 'user' : admin ? 'admin' : null;
-
-    if (!account || !userType) {
-      throw new ApiError(
-        401,
-        ErrorCodes.INVALID_CREDENTIALS,
-        'Invalid email or password'
-      );
-    }
-
-    if (!account.isVerified) {
-      throw new ApiError(403, ErrorCodes.NOT_VERIFIED, 'Email not verified');
-    }
-
-    const match = await bcrypt.compare(password, account.passwordHash);
-    if (!match) {
-      throw new ApiError(
-        401,
-        ErrorCodes.INVALID_CREDENTIALS,
-        'Invalid email or password'
-      );
-    }
-
-    const accessToken: string = jwt.sign(
-      {userId: account.id, type: userType},
-      env.JWT_SECRET,
-      {expiresIn: '15m'}
-    );
-
-    const refreshToken = jwt.sign(
-      {userId: account.id, type: userType},
-      env.JWT_REFRESH_SECRET,
-      {expiresIn: '7d'}
-    );
-
-    return {accessToken, refreshToken, user: account, userType};
-  },
-
-  async refreshAccessToken(refreshToken: string) {
-    try {
-      if (blocklistService.isRevoked(refreshToken)) {
-        throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Token revoked');
-      }
-
-      const payload = jwt.verify(
-        refreshToken,
-        env.JWT_REFRESH_SECRET
-      ) as RefreshTokenPayload;
-
-      const account = await (payload.type === 'user'
-        ? userRepository.findById(payload.userId)
-        : adminRepository.findById(payload.userId));
-
-      if (!account) {
-        throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Invalid token');
-      }
-
-      if (!account.isVerified) {
-        throw new ApiError(403, ErrorCodes.NOT_VERIFIED, 'Email not verified');
-      }
-
-      blocklistService.revoke(refreshToken);
-
-      const accessToken = jwt.sign(
-        {userId: account.id, type: payload.type},
-        env.JWT_SECRET,
-        {expiresIn: '15m'}
-      );
-
-      const newRefreshToken = jwt.sign(
-        {userId: account.id, type: payload.type},
-        env.JWT_REFRESH_SECRET,
-        {expiresIn: '7d'}
-      );
-
-      return {accessToken, refreshToken: newRefreshToken};
-    } catch {
-      throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Invalid token');
-    }
+    await repo.updateProfile(user.id, {passwordHash} as any);
   },
 
   logout(refreshToken: string) {

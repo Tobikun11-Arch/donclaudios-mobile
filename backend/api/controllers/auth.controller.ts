@@ -1,35 +1,269 @@
 import {Request, Response, NextFunction} from 'express';
 import {CookieOptions} from 'express';
 import {authService} from '../services/auth.service';
-import {ApiError} from '../utils/error';
-import {ErrorCodes} from '../constants/errorCodes';
 import {env} from '../config/env';
-import {ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE} from '../constants/cookies';
+import {ApiError} from '../utils/error';
+import {customerRepository} from '../repositories/customer.repository';
+import {adminRepository} from '../repositories/admin.repository';
+import {cashierRepository} from '../repositories/cashier.repository';
+import type {CustomerDocument} from '../models/Customer.model';
+import type {CashierDocument} from '../models/Cashier.model';
+
+const ACCESS_COOKIE = 'dc_access_token';
+const REFRESH_COOKIE = 'dc_refresh_token';
+
+function getCookieOptions(): CookieOptions {
+  const isProduction =
+    env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+
+  // SameSite=None requires Secure, which browsers ignore over plain http.
+  // In dev we always fall back to `lax` so the Expo device client (plain
+  // http://<lan-ip>:5000) can still send/receive the session cookies.
+  const sameSite =
+    isProduction
+      ? ((process.env.COOKIE_SAMESITE ?? 'none') as 'strict' | 'lax' | 'none')
+      : 'lax';
+
+  const secure =
+    process.env.COOKIE_SECURE === 'true' ||
+    (process.env.COOKIE_SECURE !== 'false' && sameSite === 'none');
+
+  return {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: '/'
+  };
+}
 
 const getIdentifier = (req: Request): string =>
-  (req.body.email as string | undefined) ?? req.body.phoneNumber;
+  (req.body?.email as string | undefined) ?? req.body?.phoneNumber;
 
-const COOKIE_OPTIONS: CookieOptions = {
-  httpOnly: true,
-  secure: env.COOKIE_SECURE === 'true',
-  sameSite: env.COOKIE_SAMESITE ?? 'lax',
-  path: '/'
-};
-
-export const authController = {
-  async me(req: Request, res: Response, next: NextFunction) {
+export const authController = {  async me(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.auth) {
-        throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Not authenticated');
+        throw new ApiError(401, 'UNAUTHORIZED', 'Not authenticated');
       }
 
       if (!req.auth.type) {
-        throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Invalid token');
+        throw new ApiError(401, 'UNAUTHORIZED', 'Invalid token');
       }
 
-      const user = await authService.me(req.auth.userId, req.auth.type);
+      const customer =
+        req.auth.type === 'customer'
+          ? await customerRepository.findById(req.auth.userId)
+          : null;
 
-      res.status(200).json({user});
+      const admin =
+        req.auth.type === 'admin'
+          ? await adminRepository.findById(req.auth.userId)
+          : null;
+
+      const cashier =
+        req.auth.type === 'cashier'
+          ? await cashierRepository.findById(req.auth.userId)
+          : null;
+
+      res.status(200).json({
+        user: {
+          id: req.auth.userId,
+          type: req.auth.type,
+          firstName: admin?.firstName ?? customer?.firstName ?? cashier?.firstName,
+          lastName: admin?.lastName ?? customer?.lastName ?? cashier?.lastName,
+          email: admin?.email ?? customer?.email ?? cashier?.email,
+          phoneNumber:
+            admin?.phoneNumber ?? customer?.phoneNumber ?? cashier?.phoneNumber,
+          address: admin?.address ?? customer?.address ?? cashier?.address,
+          username: admin?.username ?? cashier?.username,
+          profilePhoto:
+            admin?.profilePhoto ?? customer?.profilePhoto ?? cashier?.profilePhoto,
+          businessName: admin?.businessName,
+          businessLogo: admin?.businessLogo,
+          storeAddress: admin?.storeAddress,
+          businessContactNumber: admin?.businessContactNumber,
+          operatingHours: admin?.operatingHours,
+          businessType: admin?.businessType,
+          closingTime: admin?.closingTime,
+          advanceCloseMinutes: admin?.advanceCloseMinutes,
+          defaultPrepMinutes: admin?.defaultPrepMinutes,
+          isManuallyClosed: admin?.isManuallyClosed,
+          manualCloseReason: admin?.manualCloseReason
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async updateProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.auth) {
+        throw new ApiError(401, 'UNAUTHORIZED', 'Not authenticated');
+      }
+
+      const allowedCustomerFields: (keyof CustomerDocument)[] = [
+        'firstName',
+        'lastName',
+        'phoneNumber',
+        'address',
+        'profilePhoto'
+      ];
+
+      if (req.auth.type === 'admin') {
+        const updated = await adminRepository.updateProfile(
+          req.auth.userId,
+          req.body
+        );
+
+        if (!updated) {
+          throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+        }
+
+        return res.status(200).json({
+          user: {
+            id: updated.id,
+            type: 'admin',
+            firstName: updated.firstName,
+            lastName: updated.lastName,
+            email: updated.email,
+            phoneNumber: updated.phoneNumber,
+            address: updated.address,
+            username: updated.username,
+            profilePhoto: updated.profilePhoto,
+            businessName: updated.businessName,
+            businessLogo: updated.businessLogo,
+            storeAddress: updated.storeAddress,
+            businessContactNumber: updated.businessContactNumber,
+            operatingHours: updated.operatingHours,
+            businessType: updated.businessType,
+            closingTime: updated.closingTime,
+            advanceCloseMinutes: updated.advanceCloseMinutes,
+            defaultPrepMinutes: updated.defaultPrepMinutes,
+            isManuallyClosed: updated.isManuallyClosed,
+            manualCloseReason: updated.manualCloseReason
+          }
+        });
+      }
+
+      if (req.auth.type === 'customer') {
+        const patch: Partial<CustomerDocument> = {};
+        for (const key of allowedCustomerFields) {
+          if (key in req.body) {
+            (patch as Record<string, unknown>)[key] = req.body[key];
+          }
+        }
+
+        const updated = await customerRepository.updateProfile(
+          req.auth.userId,
+          patch
+        );
+
+        if (!updated) {
+          throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+        }
+
+        const user = await customerRepository.findById(req.auth.userId);
+        if (!user) {
+          throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+        }
+
+        return res.status(200).json({
+          user: {
+            id: user.id,
+            type: 'customer',
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            address: user.address,
+            profilePhoto: user.profilePhoto
+          }
+        });
+      }
+
+      if (req.auth.type === 'cashier') {
+        const allowedCashierFields: (keyof CashierDocument)[] = [
+          'firstName',
+          'lastName',
+          'phoneNumber',
+          'address',
+          'username',
+          'email',
+          'profilePhoto'
+        ];
+        const patch: Partial<CashierDocument> = {};
+        for (const key of allowedCashierFields) {
+          if (key in req.body) {
+            (patch as Record<string, unknown>)[key] = req.body[key];
+          }
+        }
+
+        if (patch.email !== undefined) {
+          patch.email = (patch.email as string).toLowerCase();
+          const existingEmail = await cashierRepository.findByEmail(
+            patch.email as string
+          );
+          if (existingEmail && String(existingEmail._id) !== req.auth.userId) {
+            throw new ApiError(409, 'EMAIL_EXISTS', 'Email already exists');
+          }
+        }
+
+        if (patch.username !== undefined) {
+          const existingUsername = await cashierRepository.findByUsername(
+            patch.username as string
+          );
+          if (
+            existingUsername &&
+            String(existingUsername._id) !== req.auth.userId
+          ) {
+            throw new ApiError(409, 'USERNAME_EXISTS', 'Username already exists');
+          }
+        }
+
+        const updated = await cashierRepository.updateProfile(
+          req.auth.userId,
+          patch
+        );
+
+        if (!updated) {
+          throw new ApiError(404, 'USER_NOT_FOUND', 'User not found');
+        }
+
+        return res.status(200).json({
+          user: {
+            id: updated.id,
+            type: 'cashier',
+            firstName: updated.firstName,
+            lastName: updated.lastName,
+            email: updated.email,
+            phoneNumber: updated.phoneNumber,
+            address: updated.address,
+            username: updated.username,
+            profilePhoto: updated.profilePhoto
+          }
+        });
+      }
+
+      throw new ApiError(403, 'FORBIDDEN', 'Permission denied');
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async changePassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.auth || (req.auth.type !== 'admin' && req.auth.type !== 'cashier')) {
+        throw new ApiError(403, 'FORBIDDEN', 'Permission denied');
+      }
+
+      await authService.changePassword(
+        req.auth.userId,
+        req.auth.type,
+        req.body.currentPassword,
+        req.body.newPassword
+      );
+
+      res.status(200).json({message: 'Password updated'});
     } catch (error) {
       next(error);
     }
@@ -62,112 +296,12 @@ export const authController = {
     }
   },
 
-  async login(req: Request, res: Response, next: NextFunction) {
-    try {
-      const {accessToken, refreshToken, user, userType} =
-        await authService.login(getIdentifier(req), req.body.password);
-
-      const opts = COOKIE_OPTIONS;
-
-      res.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
-        ...opts,
-        maxAge: 15 * 60 * 1000
-      });
-      res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
-        ...opts,
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
-
-      res.status(200).json({
-        accessToken,
-        refreshToken,
-        user: {
-          id: user._id.toString(),
-          email: user.email,
-          type: userType
-        }
-      });
-    } catch (error) {
-      next(error);
-    }
-  },
-
-  async refresh(req: Request, res: Response, next: NextFunction) {
-    try {
-      const refreshToken =
-        (req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined) ??
-        (req.body.refreshToken as string | undefined);
-
-      if (!refreshToken) {
-        throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Missing refresh token');
-      }
-
-      const result = await authService.refreshAccessToken(refreshToken);
-
-      const opts = COOKIE_OPTIONS;
-      res.cookie(ACCESS_TOKEN_COOKIE, result.accessToken, {
-        ...opts,
-        maxAge: 15 * 60 * 1000
-      });
-      res.cookie(REFRESH_TOKEN_COOKIE, result.refreshToken, {
-        ...opts,
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
-
-      res.status(200).json({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken
-      });
-    } catch (error) {
-      const opts = COOKIE_OPTIONS;
-      res.clearCookie(ACCESS_TOKEN_COOKIE, opts);
-      res.clearCookie(REFRESH_TOKEN_COOKIE, opts);
-      next(error);
-    }
-  },
-
-  async logout(req: Request, res: Response, next: NextFunction) {
-    try {
-      const refreshToken =
-        (req.cookies?.[REFRESH_TOKEN_COOKIE] as string | undefined) ??
-        (req.body.refreshToken as string | undefined);
-      if (refreshToken) {
-        authService.logout(refreshToken);
-      }
-
-      const opts = COOKIE_OPTIONS;
-      res.clearCookie(ACCESS_TOKEN_COOKIE, opts);
-      res.clearCookie(REFRESH_TOKEN_COOKIE, opts);
-      res.status(200).json({message: 'Logged out'});
-    } catch (error) {
-      next(error);
-    }
-  },
-
   async forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
       await authService.forgotPassword(getIdentifier(req));
-      res
-        .status(200)
-        .json({message: 'If that email exists, a reset code has been sent.'});
-    } catch (error) {
-      next(error);
-    }
-  },
-
-  async verifyResetCode(req: Request, res: Response, next: NextFunction) {
-    try {
-      await authService.verifyResetCode(getIdentifier(req), req.body.code);
-      res.status(200).json({message: 'Code verified'});
-    } catch (error) {
-      next(error);
-    }
-  },
-
-  async resendResetCode(req: Request, res: Response, next: NextFunction) {
-    try {
-      await authService.forgotPassword(getIdentifier(req));
-      res.status(200).json({message: 'Reset code resent'});
+      res.status(200).json({
+        message: 'If that email exists, a reset code has been sent'
+      });
     } catch (error) {
       next(error);
     }
@@ -180,26 +314,110 @@ export const authController = {
         req.body.code,
         req.body.newPassword
       );
-      res.status(200).json({message: 'Password reset successfully'});
+      res.status(200).json({message: 'Password reset'});
     } catch (error) {
       next(error);
     }
   },
 
-  async changePassword(req: Request, res: Response, next: NextFunction) {
+  async login(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.auth) {
-        throw new ApiError(401, ErrorCodes.UNAUTHORIZED, 'Not authenticated');
+      const {accessToken, refreshToken, user, userType} =
+        await authService.login(getIdentifier(req), req.body.password);
+
+      const opts = getCookieOptions();
+
+      res.cookie(ACCESS_COOKIE, accessToken, {
+        ...opts,
+        maxAge: 15 * 60 * 1000
+      });
+      res.cookie(REFRESH_COOKIE, refreshToken, {
+        ...opts,
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
+
+      res.status(200).json({
+        accessToken,
+        refreshToken,
+        user: {
+          id: user._id.toString(),
+          email: user.email,
+          type: userType,
+          firstName: 'firstName' in user ? user.firstName : undefined,
+          lastName: 'lastName' in user ? user.lastName : undefined,
+          phoneNumber: 'phoneNumber' in user ? user.phoneNumber : undefined,
+          address: 'address' in user ? user.address : undefined
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async refresh(req: Request, res: Response, next: NextFunction) {
+    try {
+      const refreshToken =
+        (req.cookies?.[REFRESH_COOKIE] as string | undefined) ??
+        (req.body.refreshToken as string | undefined);
+
+      if (!refreshToken) {
+        throw new ApiError(401, 'UNAUTHORIZED', 'Missing refresh token');
       }
 
-      await authService.changePassword(
-        req.auth.userId,
-        req.auth.type ?? 'user',
-        req.body.currentPassword,
-        req.body.newPassword
-      );
+      const result = await authService.refreshAccessToken(refreshToken);
 
-      res.status(200).json({message: 'Password changed successfully'});
+      const opts = getCookieOptions();
+      res.cookie(ACCESS_COOKIE, result.accessToken, {
+        ...opts,
+        maxAge: 15 * 60 * 1000
+      });
+
+      // Tokens also go in the body so native clients (which don't use
+      // cookies) can persist the rotated access token.
+      res.status(200).json({message: 'Refreshed', accessToken: result.accessToken});
+    } catch (error) {
+      const opts = getCookieOptions();
+      res.clearCookie(ACCESS_COOKIE, opts);
+      res.clearCookie(REFRESH_COOKIE, opts);
+      next(error);
+    }
+  },
+
+  async logout(req: Request, res: Response, next: NextFunction) {
+    try {
+      const refreshToken =
+        (req.cookies?.[REFRESH_COOKIE] as string | undefined) ??
+        (req.body?.refreshToken as string | undefined);
+
+      if (refreshToken) {
+        authService.logout(refreshToken);
+      }
+
+      const opts = getCookieOptions();
+      res.clearCookie(ACCESS_COOKIE, opts);
+      res.clearCookie(REFRESH_COOKIE, opts);
+      res.status(200).json({message: 'Logged out'});
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async sessions(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.auth || req.auth.type !== 'admin') {
+        throw new ApiError(403, 'FORBIDDEN', 'Admin access required');
+      }
+
+      res.status(200).json({
+        sessions: [
+          {
+            device: 'This device',
+            location: 'Current session',
+            lastActive: new Date().toISOString(),
+            isCurrent: true
+          }
+        ]
+      });
     } catch (error) {
       next(error);
     }

@@ -1,18 +1,27 @@
 import {AdminModel, AdminDocument} from '../models/Admin.model';
+import {phoneVariants} from '../utils/phone';
 
 export const adminRepository = {
   findByEmail: (email: string) =>
     AdminModel.findOne({email: email.toLowerCase()}).exec(),
 
-  findByEmailOrUsername: (identifier: string) =>
+  findByPhoneNumber: (phoneNumber: string) =>
+    AdminModel.findOne({phoneNumber: {$in: phoneVariants(phoneNumber)}}).exec(),
+
+  findByEmailOrPhoneNumber: (identifier: string) =>
     AdminModel.findOne({
-      $or: [{email: identifier.toLowerCase()}, {username: identifier}]
+      $or: [
+        {email: identifier.toLowerCase()},
+        {phoneNumber: {$in: phoneVariants(identifier)}}
+      ]
     }).exec(),
 
   findById: (id: string) => AdminModel.findById(id).exec(),
 
-  updatePassword: (userId: string, passwordHash: string) =>
-    AdminModel.updateOne({_id: userId}, {passwordHash}).exec(),
+  listAll: () => AdminModel.find({}).exec(),
 
-  create: (data: Partial<AdminDocument>) => AdminModel.create(data)
+  create: (data: Partial<AdminDocument>) => AdminModel.create(data),
+
+  updateProfile: (id: string, data: Partial<AdminDocument>) =>
+    AdminModel.findByIdAndUpdate(id, data, {new: true}).exec()
 };

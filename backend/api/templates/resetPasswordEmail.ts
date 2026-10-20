@@ -6,7 +6,7 @@ type ResetPasswordEmailParams = {
 };
 
 export function resetPasswordEmailTemplate({
-  appName = 'your app name',
+  appName = 'DonClaudios',
   code,
   expiresMinutes,
   recipientName

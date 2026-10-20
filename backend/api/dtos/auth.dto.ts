@@ -1,34 +1,24 @@
 import {z} from 'zod';
-
-/** Required, non-empty string with a human-readable message. */
-const requiredString = (label: string) =>
-  z.string({required_error: `${label} is required`}).trim().min(1, `${label} is required`);
-
-const emailSchema = requiredString('Email').pipe(
-  z.string().email('Enter a valid email address')
-);
-
-const codeSchema = z
-  .string({required_error: 'Verification code is required'})
-  .trim()
-  .regex(/^\d{6}$/, 'Enter the 6-digit code');
+import {PASSWORD_RULES} from '../utils/passwordRules';
 
 const passwordSchema = z
-  .string({required_error: 'Password is required'})
+  .string()
   .min(1, 'Password is required')
-  .min(8, 'Password must be at least 8 characters')
-  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-  .regex(/[0-9]/, 'Password must contain at least one digit')
-  .regex(
-    /[^A-Za-z0-9]/,
-    'Password must contain at least one special character'
-  );
+  .superRefine((value, ctx) => {
+    for (const rule of PASSWORD_RULES) {
+      if (!rule.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Password must include: ${rule.label}`
+        });
+      }
+    }
+  });
 
-/** Accepts an email or a phone number — at least one must be provided. */
+/** Email or phone — at least one is required for identifier-based endpoints. */
 const identifierFields = {
-  email: emailSchema.optional(),
-  phoneNumber: z.string().trim().min(1, 'Phone number is required').optional()
+  email: z.string().email().optional(),
+  phoneNumber: z.string().min(1).optional()
 };
 
 const requireIdentifier = (
@@ -41,23 +31,22 @@ const requireIdentifier = (
       message: 'Email or phone number is required'
     });
   }
-  return v;
 };
 
 export const registerDto = z.object({
-  firstName: requiredString('First name'),
-  lastName: requiredString('Last name'),
-  email: emailSchema,
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  email: z.string().email(),
   password: passwordSchema,
-  username: requiredString('Username'),
-  phoneNumber: z.string().trim().min(1, 'Phone number is required'),
-  address: z.string().trim().min(1, 'Address is required')
+  phoneNumber: z.string().min(1).optional(),
+  address: z.string().min(1).optional(),
+  username: z.string().min(1).optional()
 });
 
 export const verifyDto = z
   .object({
     ...identifierFields,
-    code: codeSchema // always 6 digits from generateVerificationCode()
+    code: z.string().length(6) // always 6 digits from generateVerificationCode()
   })
   .superRefine(requireIdentifier);
 
@@ -68,7 +57,7 @@ export const resendVerificationDto = z
 export const loginDto = z
   .object({
     ...identifierFields,
-    password: requiredString('Password')
+    password: z.string().min(1)
   })
   .superRefine(requireIdentifier);
 
@@ -83,17 +72,35 @@ export const forgotPasswordDto = z
 export const resetPasswordDto = z
   .object({
     ...identifierFields,
-    code: codeSchema,
+    code: z.string().length(6),
     newPassword: passwordSchema
   })
   .superRefine(requireIdentifier);
 
-export const resendResetCodeDto = z
-  .object(identifierFields)
-  .superRefine(requireIdentifier);
+export const updateProfileDto = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  phoneNumber: z.string().min(1).optional(),
+  currentPassword: z.string().min(1).optional(),
+  username: z.string().min(1).optional(),
+  profilePhoto: z.string().min(1).optional(),
+  businessName: z.string().min(1).optional(),
+  businessLogo: z.string().min(1).optional(),
+  storeAddress: z.string().min(1).optional(),
+  businessContactNumber: z.string().min(1).optional(),
+  operatingHours: z.string().min(1).optional(),
+  businessType: z.string().min(1).optional(),
+  address: z.string().min(1).optional(),
+  closingTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  advanceCloseMinutes: z.number().int().min(5).max(60).optional(),
+  defaultPrepMinutes: z.number().int().min(1).max(1440).optional(),
+  isManuallyClosed: z.boolean().optional(),
+  manualCloseReason: z.string().optional()
+});
 
 export const changePasswordDto = z.object({
-  currentPassword: requiredString('Current password'),
+  currentPassword: z.string().min(1),
   newPassword: passwordSchema
 });
 
@@ -103,5 +110,6 @@ export type ResendVerificationDto = z.infer<typeof resendVerificationDto>;
 export type LoginDto = z.infer<typeof loginDto>;
 export type RefreshDto = z.infer<typeof refreshDto>;
 export type ForgotPasswordDto = z.infer<typeof forgotPasswordDto>;
-export type ResendResetCodeDto = z.infer<typeof resendResetCodeDto>;
 export type ResetPasswordDto = z.infer<typeof resetPasswordDto>;
+export type UpdateProfileDto = z.infer<typeof updateProfileDto>;
+export type ChangePasswordDto = z.infer<typeof changePasswordDto>;

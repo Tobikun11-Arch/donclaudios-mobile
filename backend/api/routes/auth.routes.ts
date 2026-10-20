@@ -7,22 +7,20 @@ import {
   verifyDto,
   loginDto,
   refreshDto,
+  updateProfileDto,
+  changePasswordDto,
   forgotPasswordDto,
-  resetPasswordDto,
-  resendResetCodeDto,
-  changePasswordDto
+  resetPasswordDto
 } from '../dtos/auth.dto';
 import {
   authLimiter,
-  authActionLimiter,
-  authReadLimiter
+  loginLimiter,
+  sessionLimiter
 } from '../middleware/rateLimit';
-import {requireAuth} from '../middleware/auth';
-import {issueCsrfToken} from '../middleware/csrf';
+import {requireAuth, requireAdmin} from '../middleware/auth';
 
 const router = Router();
 
-// sensitive write operations — strict limit
 router.post(
   '/register',
   authLimiter,
@@ -36,27 +34,16 @@ router.post(
   validate(resendVerificationDto),
   authController.resendVerification
 );
-router.post('/login', authLimiter, validate(loginDto), authController.login);
 
-// password reset — strict limit
+router.post('/login', loginLimiter, validate(loginDto), authController.login);
+
 router.post(
   '/forgot-password',
   authLimiter,
   validate(forgotPasswordDto),
   authController.forgotPassword
 );
-router.post(
-  '/verify-reset-code',
-  authLimiter,
-  validate(verifyDto),
-  authController.verifyResetCode
-);
-router.post(
-  '/resend-reset-code',
-  authLimiter,
-  validate(resendResetCodeDto),
-  authController.resendResetCode
-);
+
 router.post(
   '/reset-password',
   authLimiter,
@@ -64,24 +51,33 @@ router.post(
   authController.resetPassword
 );
 
-// authenticated actions — moderate limit
 router.post(
   '/refresh',
-  authActionLimiter,
+  sessionLimiter,
   validate(refreshDto),
   authController.refresh
 );
-router.post('/logout', authActionLimiter, authController.logout);
+router.post('/logout', sessionLimiter, authController.logout);
+router.get('/me', sessionLimiter, requireAuth, authController.me);
+
+router.put(
+  '/profile',
+  requireAuth,
+  validate(updateProfileDto),
+  authController.updateProfile
+);
+
 router.put(
   '/password',
-  authActionLimiter,
   requireAuth,
   validate(changePasswordDto),
   authController.changePassword
 );
-router.get('/csrf', authActionLimiter, issueCsrfToken);
 
-// read-only — lenient limit
-router.get('/me', authReadLimiter, requireAuth, authController.me);
-
+router.get(
+  '/sessions',
+  requireAuth,
+  requireAdmin,
+  authController.sessions
+);
 export default router;
