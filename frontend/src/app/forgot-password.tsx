@@ -11,77 +11,28 @@ import {
 } from '@/components/auth/auth-screen';
 import { FormField } from '@/components/auth/form-field';
 import { ThemedText } from '@/components/themed-text';
-import { useAuth } from '@/lib/auth-context';
-import { validateCode, validateEmail, validateNewPassword } from '@/lib/validation';
-
-type Step = 'email' | 'code' | 'password';
+import { validateEmail } from '@/lib/validation';
 
 export default function ForgotPasswordScreen() {
-  const { forgotPassword, verifyResetCode, resetPassword } = useAuth();
   const goToLogin = useToAuth('/');
-
-  const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [notice, setNotice] = useState('');
 
-  async function onRequestCode() {
+  async function onSubmit() {
     const validationError = validateEmail(email);
     if (validationError) {
       setError(validationError);
       return;
     }
-
     setError('');
     setLoading(true);
     try {
-      await forgotPassword(email.trim());
-      setStep('code');
-      setNotice('If that email exists, a reset code has been sent.');
+      throw new Error(
+        'This feature is not available yet. Please contact support or try again later.'
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onVerifyCode() {
-    const validationError = validateCode(code);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-    try {
-      await verifyResetCode(email.trim(), code.trim());
-      setStep('password');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not verify code');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onReset() {
-    const validationError = validateNewPassword(newPassword);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-    try {
-      await resetPassword(email.trim(), code.trim(), newPassword);
-      setNotice('Password reset! Sign in with your new password.');
-      setStep('email');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reset password');
+      setError(err instanceof Error ? err.message : 'Unable to send reset link.');
     } finally {
       setLoading(false);
     }
@@ -89,76 +40,25 @@ export default function ForgotPasswordScreen() {
 
   return (
     <AuthLayout
-      footer={
-        step === 'email' ? (
-          <AuthFooterLink prompt="Remembered it?" link="Sign in" onPress={goToLogin} />
-        ) : undefined
-      }>
+      footer={<AuthFooterLink prompt="Remembered it?" link="Sign in" onPress={goToLogin} />}>
       <BrandHeader
-        title={
-          step === 'email' ? 'Forgot password' : step === 'code' ? 'Enter reset code' : 'New password'
-        }
-        subtitle={
-          step === 'email'
-            ? 'Enter your email and we will send you a reset code.'
-            : step === 'code'
-            ? 'Enter the 6-digit reset code from your email.'
-            : 'Choose a new password for your account.'
-        }
+        title="Forgot password"
+        subtitle="Enter your email and we will send you a link to reset your password."
       />
-
       <View style={styles.form}>
-        {step === 'email' && (
-          <>
-            <FormField
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              keyboardType="email-address"
-              autoComplete="email"
-            />
-            <FormError message={error} />
-            <PrimaryButton label="Send reset code" onPress={onRequestCode} loading={loading} />
-          </>
-        )}
-
-        {step === 'code' && (
-          <>
-            <ThemedText type="small" themeColor="textSecondary">{notice}</ThemedText>
-            <FormField
-              label="Reset code"
-              value={code}
-              onChangeText={setCode}
-              placeholder="6-digit code"
-              keyboardType="number-pad"
-              autoComplete="one-time-code"
-              textContentType="oneTimeCode"
-              maxLength={6}
-            />
-            <FormError message={error} />
-            <PrimaryButton label="Verify code" onPress={onVerifyCode} loading={loading} />
-          </>
-        )}
-
-        {step === 'password' && (
-          <>
-            <FormField
-              label="New password"
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder="Min 8 chars, mixed case, number & symbol"
-              secureTextEntry
-              returnKeyType="done"
-            />
-            <FormError message={error} />
-            <PrimaryButton label="Reset password" onPress={onReset} loading={loading} />
-          </>
-        )}
-
-        {notice && step === 'email' && (
-          <ThemedText type="small" themeColor="textSecondary">{notice}</ThemedText>
-        )}
+        <FormField
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+          keyboardType="email-address"
+          autoComplete="email"
+        />
+        <FormError message={error} />
+        <PrimaryButton label="Send reset link" onPress={onSubmit} loading={loading} />
+        <ThemedText type="small" themeColor="textSecondary">
+          Password reset is coming soon. Contact support if you are locked out.
+        </ThemedText>
       </View>
     </AuthLayout>
   );

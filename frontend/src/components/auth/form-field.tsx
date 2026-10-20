@@ -12,7 +12,7 @@ type Props = {
   placeholder?: string;
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words';
-  keyboardType?: 'default' | 'email-address' | 'number-pad';
+  keyboardType?: 'default' | 'email-address' | 'number-pad' | 'phone-pad';
   autoComplete?: TextInputProps['autoComplete'];
   textContentType?: TextInputProps['textContentType'];
   returnKeyType?: 'next' | 'done';

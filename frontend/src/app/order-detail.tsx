@@ -13,6 +13,7 @@ type Order = {
   orderType: string;
   totalAmount: number;
   items: OrderItem[];
+  prepTiming?: { isOverdue?: boolean; minutesRemaining?: number | null; isRunning?: boolean };
 };
 
 export default function OrderDetailScreen() {
@@ -22,6 +23,20 @@ export default function OrderDetailScreen() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  async function cancel() {
+    setCancelling(true);
+    try {
+      await api.post(`/api/orders/customer/track/${id}/cancel`);
+      const data = await api.get<{ order: Order }>(`/api/orders/customer/track/${id}`);
+      setOrder(data.order);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Cancel failed');
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -59,6 +74,16 @@ export default function OrderDetailScreen() {
         <Text style={styles.status}>Status: {order.orderStatus}</Text>
         <Text style={styles.meta}>Type: {order.orderType}</Text>
         <Text style={styles.meta}>Total: ₱{order.totalAmount}</Text>
+        {order.prepTiming ? (
+          <Text style={styles.meta}>
+            {order.prepTiming.isOverdue ? 'Overdue' : `Minutes remaining: ${order.prepTiming.minutesRemaining ?? '—'}`}
+          </Text>
+        ) : null}
+        {order.orderStatus === 'pending' ? (
+          <Pressable style={styles.cancelBtn} onPress={cancel} disabled={cancelling}>
+            <Text style={styles.cancelText}>{cancelling ? 'Cancelling...' : 'Cancel order'}</Text>
+          </Pressable>
+        ) : null}
 
         <Text style={styles.section}>Items</Text>
         {order.items.map((it, idx) => (
@@ -70,6 +95,9 @@ export default function OrderDetailScreen() {
           </View>
         ))}
 
+        <Pressable style={styles.back} onPress={() => router.push(`/order-chat?id=${id}`)}>
+          <Text style={styles.backText}>Open chat</Text>
+        </Pressable>
         <Pressable style={styles.back} onPress={() => router.replace('/orders')}>
           <Text style={styles.backText}>Back to orders</Text>
         </Pressable>
@@ -86,5 +114,7 @@ const styles = StyleSheet.create({
   item: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   itemText: { color: '#1A1A1A' },
   back: { marginTop: 24, alignItems: 'center' },
-  backText: { color: '#3C5E45', fontWeight: '600' }
+  backText: { color: '#3C5E45', fontWeight: '600' },
+  cancelBtn: { marginTop: 12, backgroundColor: '#C30010', padding: 10, borderRadius: 8, alignItems: 'center' },
+  cancelText: { color: '#FFFFFF', fontWeight: '600' }
 });

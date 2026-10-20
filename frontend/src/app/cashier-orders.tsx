@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { ThemedView } from '@/components/themed-view';
 import { api } from '@/lib/api';
@@ -10,6 +11,7 @@ type Order = { _id: string; orderStatus: string; orderType: string; totalAmount:
 const STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'on_the_way', 'completed', 'cancelled'];
 
 export default function CashierOrdersScreen() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,14 +58,14 @@ export default function CashierOrdersScreen() {
           keyExtractor={(item) => item._id}
           ListEmptyComponent={<Text style={styles.empty}>No orders.</Text>}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <Pressable style={styles.card} onPress={() => router.push(`/staff-order-detail?id=${item._id}`)}>
               <Text style={styles.id}>#{item._id.slice(-6)}</Text>
               <Text style={styles.meta}>{item.orderType} • {item.orderStatus}</Text>
               <Text style={styles.total}>₱{item.totalAmount}</Text>
               <Pressable style={styles.btn} onPress={() => advance(item)}>
                 <Text style={styles.btnText}>Advance</Text>
               </Pressable>
-            </View>
+            </Pressable>
           )}
         />
       </SafeAreaView>

@@ -71,6 +71,7 @@ export default function DashboardScreen() {
               <PrimaryButton label="Browse menu" onPress={() => router.push('/menu')} />
               <PrimaryButton label="My cart" onPress={() => router.push('/cart')} />
               <PrimaryButton label="My orders" onPress={() => router.push('/orders')} />
+              <PrimaryButton label="Profile" onPress={() => router.push('/profile')} />
               <PrimaryButton label="Promos" onPress={() => router.push('/customer-promos')} />
               <PrimaryButton label="Rewards" onPress={() => router.push('/rewards')} />
             </>
@@ -79,6 +80,7 @@ export default function DashboardScreen() {
             <>
               <PrimaryButton label="Order queue" onPress={() => router.push('/cashier-orders')} />
               <PrimaryButton label="Counter orders" onPress={() => router.push('/cashier-counter')} />
+              <PrimaryButton label="New counter order" onPress={() => router.push('/cashier-counter-create')} />
             </>
           ) : null}
           {user?.type === 'admin' ? (
@@ -92,6 +94,7 @@ export default function DashboardScreen() {
               <PrimaryButton label="Cashiers" onPress={() => router.push('/owner-cashiers')} />
               <PrimaryButton label="Reports" onPress={() => router.push('/owner-reports')} />
               <PrimaryButton label="Ingredients" onPress={() => router.push('/owner-ingredients')} />
+              <PrimaryButton label="Support inbox" onPress={() => router.push('/support-admin')} />
             </>
           ) : null}
         </View>

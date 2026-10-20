@@ -6,9 +6,11 @@ import { ThemedView } from '@/components/themed-view';
 import { api } from '@/lib/api';
 
 type Product = { _id: string; name: string; stock?: number };
+type Movement = { _id: string; type: string; quantity: number; newStock?: number; note?: string; createdAt?: string };
 
 export default function OwnerInventoryScreen() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState<Record<string, string>>({});
 
@@ -16,6 +18,8 @@ export default function OwnerInventoryScreen() {
     try {
       const data = await api.get<{ products: Product[] }>('/api/products');
       setProducts(data.products ?? []);
+      const m = await api.get<{ movements: Movement[] }>('/api/inventory/movements');
+      setMovements(m.movements ?? []);
     } catch {
       setProducts([]);
     } finally {
@@ -81,6 +85,21 @@ export default function OwnerInventoryScreen() {
             </View>
           )}
         />
+        <Text style={styles.section}>Recent activity</Text>
+        <FlatList
+          data={movements}
+          keyExtractor={(item) => item._id}
+          ListEmptyComponent={<Text style={styles.empty}>No activity.</Text>}
+          renderItem={({ item }) => (
+            <View style={styles.movement}>
+              <Text style={styles.name}>{item.type} {item.quantity > 0 ? `+${item.quantity}` : item.quantity}</Text>
+              <Text style={styles.meta}>
+                {item.note ? `${item.note} • ` : ''}new stock {item.newStock ?? '—'}
+                {item.createdAt ? ` • ${new Date(item.createdAt).toLocaleString()}` : ''}
+              </Text>
+            </View>
+          )}
+        />
       </SafeAreaView>
     </ThemedView>
   );
@@ -95,5 +114,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8, marginTop: 8 },
   btn: { flex: 1, backgroundColor: '#3C5E45', padding: 10, borderRadius: 8, alignItems: 'center' },
   btnAlt: { backgroundColor: '#6B7280' },
-  btnText: { color: '#FFFFFF', fontWeight: '600' }
+  btnText: { color: '#FFFFFF', fontWeight: '600' },
+  section: { fontWeight: '700', color: '#1A1A1A', marginTop: 20, marginBottom: 8 },
+  empty: { color: '#6B7280', marginTop: 8 },
+  movement: { padding: 10, borderRadius: 10, backgroundColor: '#F5F5F5', marginBottom: 8 }
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { Text, StyleSheet, FlatList, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { ThemedView } from '@/components/themed-view';
 import { api } from '@/lib/api';
@@ -8,6 +9,7 @@ import { api } from '@/lib/api';
 type Promo = { _id: string; name?: string; title?: string; description?: string; discountType?: string; discountValue?: number };
 
 export default function CustomerPromosScreen() {
+  const router = useRouter();
   const [promos, setPromos] = useState<Promo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,10 +43,10 @@ export default function CustomerPromosScreen() {
           keyExtractor={(item) => item._id}
           ListEmptyComponent={<Text style={styles.empty}>No promos.</Text>}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <Pressable style={styles.card} onPress={() => router.push(`/promo-detail?id=${item._id}`)}>
               <Text style={styles.name}>{item.name ?? item.title ?? 'Promo'}</Text>
               {item.description ? <Text style={styles.meta}>{item.description}</Text> : null}
-            </View>
+            </Pressable>
           )}
         />
       </SafeAreaView>

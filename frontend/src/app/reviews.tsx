@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/lib/auth-context';
@@ -10,6 +11,7 @@ type Review = { _id: string; rating?: number; comment?: string; status?: string 
 
 export default function ReviewsScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +53,11 @@ export default function ReviewsScreen() {
     <ThemedView className="flex-1">
       <SafeAreaView className="flex-1 px-4">
         <Text style={styles.title}>Reviews</Text>
+        {user?.type === 'customer' ? (
+          <Pressable style={styles.writeBtn} onPress={() => router.push('/create-review')}>
+            <Text style={styles.writeText}>Write a review</Text>
+          </Pressable>
+        ) : null}
         <FlatList
           data={reviews}
           keyExtractor={(item) => item._id}
@@ -80,6 +87,8 @@ export default function ReviewsScreen() {
 
 const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700', color: '#1A1A1A', marginVertical: 12 },
+  writeBtn: { backgroundColor: '#3C5E45', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
+  writeText: { color: '#FFFFFF', fontWeight: '600' },
   empty: { color: '#6B7280', marginTop: 24, textAlign: 'center' },
   card: { padding: 12, borderRadius: 12, backgroundColor: '#F5F5F5', marginBottom: 10 },
   name: { fontWeight: '600', color: '#1A1A1A' },

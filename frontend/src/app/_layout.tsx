@@ -43,9 +43,13 @@ function RootNavigator() {
         <Stack.Screen name="checkout" />
         <Stack.Screen name="orders" />
         <Stack.Screen name="order-detail" />
+        <Stack.Screen name="order-chat" />
         <Stack.Screen name="cashier-orders" />
+        <Stack.Screen name="staff-order-detail" />
         <Stack.Screen name="cashier-counter" />
+        <Stack.Screen name="cashier-counter-create" />
         <Stack.Screen name="owner-products" />
+        <Stack.Screen name="product-form" />
         <Stack.Screen name="owner-dashboard" />
         <Stack.Screen name="owner-inventory" />
         <Stack.Screen name="owner-categories" />
@@ -55,12 +59,15 @@ function RootNavigator() {
         <Stack.Screen name="owner-promos" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="customer-promos" />
+        <Stack.Screen name="promo-detail" />
         <Stack.Screen name="rewards" />
         <Stack.Screen name="reviews" />
+        <Stack.Screen name="create-review" />
         <Stack.Screen name="support" />
+        <Stack.Screen name="support-admin" />
+        <Stack.Screen name="support-chat" />
         <Stack.Screen name="settings" />
-        <Stack.Screen name="support" />
-        <Stack.Screen name="reviews" />
+        <Stack.Screen name="profile" />
       </Stack.Protected>
     </Stack>
   );
