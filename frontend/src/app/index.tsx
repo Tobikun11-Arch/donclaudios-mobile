@@ -11,7 +11,7 @@ import {
 import {FormField} from '@/components/auth/form-field';
 import {ThemedText} from '@/components/themed-text';
 import {useAuth} from '@/lib/auth-context';
-import {firstError, validateEmail, validatePassword} from '@/lib/validation';
+import {firstError, validateEmailOrPhone, validatePassword} from '@/lib/validation';
 
 export default function LoginScreen() {
   const {signIn} = useAuth();
@@ -26,7 +26,10 @@ export default function LoginScreen() {
   async function onSubmit() {
     // Validate locally first so the user never sees a raw server error such as
     // "String must contain at least 1 character".
-    const validationError = firstError(validateEmail(email), validatePassword(password));
+    const validationError = firstError(
+      validateEmailOrPhone(email),
+      validatePassword(password)
+    );
     if (validationError) {
       setError(validationError);
       return;
@@ -76,12 +79,11 @@ export default function LoginScreen() {
 
       <View style={styles.form}>
         <FormField
-          label="Email"
+          label="Email or phone"
           value={email}
           onChangeText={setEmail}
-          placeholder="you@example.com"
-          keyboardType="email-address"
-          autoComplete="email"
+          placeholder="you@example.com or 0917 123 4567"
+          autoComplete="username"
         />
         <FormField
           label="Password"

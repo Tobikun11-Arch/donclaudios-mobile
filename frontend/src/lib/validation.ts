@@ -24,6 +24,22 @@ export function validateEmail(value: string): string | null {
   return null;
 }
 
+const PHONE_RE = /^[+]?[\d\s()-]{7,15}$/;
+
+export function validateEmailOrPhone(value: string): string | null {
+  const identifier = value.trim();
+  if (!identifier) {
+    return 'Email or phone number is required';
+  }
+  if (EMAIL_RE.test(identifier)) {
+    return null;
+  }
+  if (PHONE_RE.test(identifier)) {
+    return null;
+  }
+  return 'Enter a valid email address or phone number';
+}
+
 export function validatePassword(value: string): string | null {
   if (!value) {
     return 'Password is required';

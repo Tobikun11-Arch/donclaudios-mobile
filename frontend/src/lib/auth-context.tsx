@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { api, ApiError } from './api';
+import { tokenStore } from './token-store';
 
 export type User = {
   id: string;
@@ -37,15 +38,21 @@ type SignUpParams = {
   username?: string;
 };
 
+type AuthIdentifier = { email?: string; phoneNumber?: string };
+
 type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (identifier: string, password: string) => Promise<void>;
   signUp: (params: SignUpParams) => Promise<void>;
-  verify: (phoneNumber: string, code: string) => Promise<void>;
-  resendVerification: (phoneNumber: string) => Promise<void>;
-  forgotPassword: (email: string) => Promise<void>;
-  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
+  verify: (identifier: AuthIdentifier, code: string) => Promise<void>;
+  resendVerification: (identifier: AuthIdentifier) => Promise<void>;
+  forgotPassword: (identifier: AuthIdentifier) => Promise<void>;
+  resetPassword: (
+    identifier: AuthIdentifier,
+    code: string,
+    newPassword: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -74,6 +81,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function bootstrap() {
       try {
+        const tokens = await tokenStore.load();
+        if (!tokens.access && !tokens.refresh) {
+          if (!cancelled) {
+            setUser(null);
+            setStatus('signedOut');
+          }
+          return;
+        }
+
         const data = await api.get<{ user: User }>('/api/auth/me');
         if (!cancelled) {
           setUser(data.user);
@@ -94,8 +110,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    await api.post('/api/auth/login', { email, password });
+  const signIn = useCallback(async (identifier: string, password: string) => {
+    const field: AuthIdentifier = identifier.includes('@')
+      ? { email: identifier }
+      : { phoneNumber: identifier };
+    const data = await api.post<{ accessToken: string; refreshToken: string }>(
+      '/api/auth/login',
+      { ...field, password }
+    );
+    await tokenStore.set(data.accessToken, data.refreshToken);
     await refreshUser();
   }, [refreshUser]);
 
@@ -103,31 +126,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.post('/api/auth/register', params);
   }, []);
 
-  const verify = useCallback(async (phoneNumber: string, code: string) => {
-    await api.post('/api/auth/verify', { phoneNumber, code });
+  const verify = useCallback(async (identifier: AuthIdentifier, code: string) => {
+    await api.post('/api/auth/verify', { ...identifier, code });
   }, []);
 
-  const resendVerification = useCallback(async (phoneNumber: string) => {
-    await api.post('/api/auth/resend-verification', { phoneNumber });
+  const resendVerification = useCallback(async (identifier: AuthIdentifier) => {
+    await api.post('/api/auth/resend-verification', { ...identifier });
   }, []);
 
-  const forgotPassword = useCallback(async (email: string) => {
-    await api.post('/api/auth/forgot-password', { email });
+  const forgotPassword = useCallback(async (identifier: AuthIdentifier) => {
+    await api.post('/api/auth/forgot-password', { ...identifier });
   }, []);
 
   const resetPassword = useCallback(
-    async (email: string, code: string, newPassword: string) => {
-      await api.post('/api/auth/reset-password', { email, code, newPassword });
+    async (identifier: AuthIdentifier, code: string, newPassword: string) => {
+      await api.post('/api/auth/reset-password', {
+        ...identifier,
+        code,
+        newPassword
+      });
     },
     []
   );
 
   const signOut = useCallback(async () => {
     try {
-      await api.post('/api/auth/logout');
+      const refreshToken = tokenStore.refresh;
+      await api.post('/api/auth/logout', refreshToken ? { refreshToken } : undefined);
     } catch {
       // ignore
     }
+    await tokenStore.clear();
     setUser(null);
     setStatus('signedOut');
   }, []);

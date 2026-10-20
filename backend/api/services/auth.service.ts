@@ -62,6 +62,8 @@ export const authService = {
     email: string;
     password: string;
     username: string;
+    phoneNumber?: string;
+    address?: string;
   }) {
     const [existingEmail] = await Promise.all([
       userRepository.findByEmail(data.email)
@@ -82,6 +84,8 @@ export const authService = {
         email: data.email,
         passwordHash,
         username: data.username,
+        phoneNumber: data.phoneNumber,
+        address: data.address,
         verificationCode,
         verificationExpiry,
         isVerified: false
@@ -125,8 +129,8 @@ export const authService = {
     }
   },
 
-  async verify(email: string, code: string) {
-    const user = await userRepository.findByEmail(email);
+  async verify(identifier: string, code: string) {
+    const user = await userRepository.findByIdentifier(identifier);
 
     if (!user || !user.verificationCode || !user.verificationExpiry) {
       throw new ApiError(400, ErrorCodes.INVALID_CODE, 'Invalid verification code');
@@ -143,11 +147,11 @@ export const authService = {
       );
     }
 
-    await userRepository.markVerified(email);
+    await userRepository.markVerified(user.id);
   },
 
-  async resendVerification(email: string) {
-    const user = await userRepository.findByEmail(email);
+  async resendVerification(identifier: string) {
+    const user = await userRepository.findByIdentifier(identifier);
     if (!user || user.isVerified) {
       return;
     }
@@ -156,7 +160,7 @@ export const authService = {
     const verificationExpiry = getVerificationExpiry(10);
 
     await userRepository.setVerificationCode(
-      email,
+      user.id,
       verificationCode,
       verificationExpiry
     );
@@ -168,7 +172,7 @@ export const authService = {
     });
 
     sendEmailInBackground({
-      to: email,
+      to: user.email,
       subject: emailTpl.subject,
       text: emailTpl.text,
       html: emailTpl.html
@@ -194,25 +198,25 @@ export const authService = {
     });
   },
 
-  async forgotPassword(email: string) {
-    const user = await userRepository.findByEmail(email);
+  async forgotPassword(identifier: string) {
+    const user = await userRepository.findByIdentifier(identifier);
 
     if (!user || !user.isVerified) return;
 
     const resetCode = generateVerificationCode();
     const resetExpiry = getVerificationExpiry(10);
 
-    await userRepository.setResetCode(email, resetCode, resetExpiry);
+    await userRepository.setResetCode(user.id, resetCode, resetExpiry);
 
     authService.sendResetPasswordCodeEmail({
-      email,
+      email: user.email,
       code: resetCode,
       recipientName: user.firstName
     });
   },
 
-  async verifyResetCode(email: string, code: string) {
-    const user = await userRepository.findByEmail(email);
+  async verifyResetCode(identifier: string, code: string) {
+    const user = await userRepository.findByIdentifier(identifier);
 
     if (!user || !user.resetCode || !user.resetExpiry) {
       throw new ApiError(400, ErrorCodes.INVALID_CODE, 'Invalid or expired reset code');
@@ -226,8 +230,8 @@ export const authService = {
     }
   },
 
-  async resetPassword(email: string, code: string, newPassword: string) {
-    const user = await userRepository.findByEmail(email);
+  async resetPassword(identifier: string, code: string, newPassword: string) {
+    const user = await userRepository.findByIdentifier(identifier);
 
     if (!user || !user.resetCode || !user.resetExpiry) {
       throw new ApiError(400, ErrorCodes.INVALID_CODE, 'Invalid or expired reset code');
@@ -243,7 +247,7 @@ export const authService = {
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     await userRepository.updatePassword(user.id, passwordHash);
-    await userRepository.clearResetCode(email);
+    await userRepository.clearResetCode(user.id);
   },
 
   async changePassword(
@@ -272,10 +276,9 @@ export const authService = {
     await repository.updatePassword(userId, passwordHash);
   },
 
-  async login(email: string, password: string) {
-    const identifier = email;
+  async login(identifier: string, password: string) {
     const [user, admin] = await Promise.all([
-      userRepository.findByEmail(identifier),
+      userRepository.findByIdentifier(identifier),
       adminRepository.findByEmailOrUsername(identifier)
     ]);
 

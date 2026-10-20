@@ -14,7 +14,8 @@ import { useAuth } from '@/lib/auth-context';
 import { validateCode } from '@/lib/validation';
 
 export default function VerifyPhoneScreen() {
-  const params = useLocalSearchParams<{ phone?: string }>();
+  const params = useLocalSearchParams<{ email?: string; phone?: string }>();
+  const email = (params.email ?? '').toString();
   const phone = (params.phone ?? '').toString();
   const { verify, resendVerification } = useAuth();
   const router = useRouter();
@@ -33,8 +34,11 @@ export default function VerifyPhoneScreen() {
     setError('');
     setLoading(true);
     try {
-      await verify(phone, code.trim());
-      setNotice('Phone verified! You can now sign in.');
+      await verify(
+        { email: email || undefined, phoneNumber: phone || undefined },
+        code.trim()
+      );
+      setNotice('Verified! You can now sign in.');
       router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed');
@@ -47,7 +51,9 @@ export default function VerifyPhoneScreen() {
     setError('');
     setLoading(true);
     try {
-      await resendVerification(phone);
+      await resendVerification(
+        { email: email || undefined, phoneNumber: phone || undefined }
+      );
       setNotice('A new code has been sent.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not resend code');
@@ -67,7 +73,7 @@ export default function VerifyPhoneScreen() {
       }
     >
       <View style={styles.header}>
-        <BrandHeader title="Verify your phone" subtitle={`Enter the 6-digit code sent to ${phone}.`} />
+        <BrandHeader title="Verify your account" subtitle={`Enter the 6-digit code sent to ${email || phone}.`} />
       </View>
 
       <View style={styles.form}>
@@ -81,7 +87,7 @@ export default function VerifyPhoneScreen() {
         />
         <FormError message={error} />
         {notice ? <ThemedText type="small" themeColor="textSecondary">{notice}</ThemedText> : null}
-        <PrimaryButton label="Verify phone" onPress={onVerify} loading={loading} />
+        <PrimaryButton label="Verify account" onPress={onVerify} loading={loading} />
       </View>
     </AuthLayout>
   );

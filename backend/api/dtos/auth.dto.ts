@@ -25,45 +25,72 @@ const passwordSchema = z
     'Password must contain at least one special character'
   );
 
+/** Accepts an email or a phone number — at least one must be provided. */
+const identifierFields = {
+  email: emailSchema.optional(),
+  phoneNumber: z.string().trim().min(1, 'Phone number is required').optional()
+};
+
+const requireIdentifier = (
+  v: {email?: string; phoneNumber?: string},
+  ctx: z.RefinementCtx
+) => {
+  if (!v.email && !v.phoneNumber) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Email or phone number is required'
+    });
+  }
+  return v;
+};
+
 export const registerDto = z.object({
   firstName: requiredString('First name'),
   lastName: requiredString('Last name'),
   email: emailSchema,
   password: passwordSchema,
-  username: requiredString('Username')
+  username: requiredString('Username'),
+  phoneNumber: z.string().trim().min(1, 'Phone number is required'),
+  address: z.string().trim().min(1, 'Address is required')
 });
 
-export const verifyDto = z.object({
-  email: emailSchema,
-  code: codeSchema // always 6 digits from generateVerificationCode()
-});
+export const verifyDto = z
+  .object({
+    ...identifierFields,
+    code: codeSchema // always 6 digits from generateVerificationCode()
+  })
+  .superRefine(requireIdentifier);
 
-export const resendVerificationDto = z.object({
-  email: emailSchema
-});
+export const resendVerificationDto = z
+  .object(identifierFields)
+  .superRefine(requireIdentifier);
 
-export const loginDto = z.object({
-  email: emailSchema,
-  password: requiredString('Password')
-});
+export const loginDto = z
+  .object({
+    ...identifierFields,
+    password: requiredString('Password')
+  })
+  .superRefine(requireIdentifier);
 
 export const refreshDto = z.object({
   refreshToken: z.string().min(1).optional()
 });
 
-export const forgotPasswordDto = z.object({
-  email: emailSchema
-});
+export const forgotPasswordDto = z
+  .object(identifierFields)
+  .superRefine(requireIdentifier);
 
-export const resetPasswordDto = z.object({
-  email: emailSchema,
-  code: codeSchema,
-  newPassword: passwordSchema
-});
+export const resetPasswordDto = z
+  .object({
+    ...identifierFields,
+    code: codeSchema,
+    newPassword: passwordSchema
+  })
+  .superRefine(requireIdentifier);
 
-export const resendResetCodeDto = z.object({
-  email: emailSchema
-});
+export const resendResetCodeDto = z
+  .object(identifierFields)
+  .superRefine(requireIdentifier);
 
 export const changePasswordDto = z.object({
   currentPassword: requiredString('Current password'),

@@ -6,6 +6,9 @@ import {ErrorCodes} from '../constants/errorCodes';
 import {env} from '../config/env';
 import {ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE} from '../constants/cookies';
 
+const getIdentifier = (req: Request): string =>
+  (req.body.email as string | undefined) ?? req.body.phoneNumber;
+
 const COOKIE_OPTIONS: CookieOptions = {
   httpOnly: true,
   secure: env.COOKIE_SECURE === 'true',
@@ -43,7 +46,7 @@ export const authController = {
 
   async verify(req: Request, res: Response, next: NextFunction) {
     try {
-      await authService.verify(req.body.email, req.body.code);
+      await authService.verify(getIdentifier(req), req.body.code);
       res.status(200).json({message: 'Verified'});
     } catch (error) {
       next(error);
@@ -52,7 +55,7 @@ export const authController = {
 
   async resendVerification(req: Request, res: Response, next: NextFunction) {
     try {
-      await authService.resendVerification(req.body.email);
+      await authService.resendVerification(getIdentifier(req));
       res.status(200).json({message: 'Verification code resent'});
     } catch (error) {
       next(error);
@@ -62,7 +65,7 @@ export const authController = {
   async login(req: Request, res: Response, next: NextFunction) {
     try {
       const {accessToken, refreshToken, user, userType} =
-        await authService.login(req.body.email, req.body.password);
+        await authService.login(getIdentifier(req), req.body.password);
 
       const opts = COOKIE_OPTIONS;
 
@@ -143,7 +146,7 @@ export const authController = {
 
   async forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      await authService.forgotPassword(req.body.email);
+      await authService.forgotPassword(getIdentifier(req));
       res
         .status(200)
         .json({message: 'If that email exists, a reset code has been sent.'});
@@ -154,7 +157,7 @@ export const authController = {
 
   async verifyResetCode(req: Request, res: Response, next: NextFunction) {
     try {
-      await authService.verifyResetCode(req.body.email, req.body.code);
+      await authService.verifyResetCode(getIdentifier(req), req.body.code);
       res.status(200).json({message: 'Code verified'});
     } catch (error) {
       next(error);
@@ -163,7 +166,7 @@ export const authController = {
 
   async resendResetCode(req: Request, res: Response, next: NextFunction) {
     try {
-      await authService.forgotPassword(req.body.email);
+      await authService.forgotPassword(getIdentifier(req));
       res.status(200).json({message: 'Reset code resent'});
     } catch (error) {
       next(error);
@@ -173,7 +176,7 @@ export const authController = {
   async resetPassword(req: Request, res: Response, next: NextFunction) {
     try {
       await authService.resetPassword(
-        req.body.email,
+        getIdentifier(req),
         req.body.code,
         req.body.newPassword
       );

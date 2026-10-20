@@ -12,9 +12,16 @@ import {
 import { FormField } from '@/components/auth/form-field';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/lib/auth-context';
-import { validateCode, validateEmail, validateNewPassword } from '@/lib/validation';
+import { validateCode, validateEmailOrPhone, validateNewPassword } from '@/lib/validation';
 
 type Step = 'email' | 'code' | 'password';
+
+function toIdentifier(value: string) {
+  const identifier = value.trim();
+  return identifier.includes('@')
+    ? { email: identifier }
+    : { phoneNumber: identifier };
+}
 
 export default function ForgotPasswordScreen() {
   const { forgotPassword, resetPassword } = useAuth();
@@ -29,7 +36,7 @@ export default function ForgotPasswordScreen() {
   const [notice, setNotice] = useState('');
 
   async function onRequestCode() {
-    const validationError = validateEmail(email);
+    const validationError = validateEmailOrPhone(email);
     if (validationError) {
       setError(validationError);
       return;
@@ -38,9 +45,9 @@ export default function ForgotPasswordScreen() {
     setError('');
     setLoading(true);
     try {
-      await forgotPassword(email.trim());
+      await forgotPassword(toIdentifier(email));
       setStep('code');
-      setNotice('If that email exists, a reset code has been sent.');
+      setNotice('If that account exists, a reset code has been sent.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -74,7 +81,7 @@ export default function ForgotPasswordScreen() {
     setError('');
     setLoading(true);
     try {
-      await resetPassword(email.trim(), code.trim(), newPassword);
+      await resetPassword(toIdentifier(email), code.trim(), newPassword);
       setNotice('Password reset! Sign in with your new password.');
       setStep('email');
     } catch (err) {
@@ -97,7 +104,7 @@ export default function ForgotPasswordScreen() {
         }
         subtitle={
           step === 'email'
-            ? 'Enter your email and we will send you a reset code.'
+            ? 'Enter your email or phone number and we will send you a reset code.'
             : step === 'code'
             ? 'Enter the 6-digit reset code from your email.'
             : 'Choose a new password for your account.'
@@ -108,12 +115,11 @@ export default function ForgotPasswordScreen() {
         {step === 'email' && (
           <>
             <FormField
-              label="Email"
+              label="Email or phone"
               value={email}
               onChangeText={setEmail}
-              placeholder="you@example.com"
-              keyboardType="email-address"
-              autoComplete="email"
+              placeholder="you@example.com or 0917 123 4567"
+              autoComplete="username"
             />
             <FormError message={error} />
             <PrimaryButton label="Send reset code" onPress={onRequestCode} loading={loading} />

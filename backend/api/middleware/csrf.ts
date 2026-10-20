@@ -8,6 +8,22 @@ import {CSRF_COOKIE} from '../constants/cookies';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+// Public auth endpoints don't rely on an existing session (they ARE the
+// session — login, register, password reset). Exempting them lets clients
+// with a stale cookie jar still authenticate; everything they accept is
+// validated by Zod DTOs and verified with JWTs / codes anyway.
+const CSRF_EXEMPT_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/verify',
+  '/api/auth/resend-verification',
+  '/api/auth/refresh',
+  '/api/auth/forgot-password',
+  '/api/auth/verify-reset-code',
+  '/api/auth/resend-reset-code',
+  '/api/auth/reset-password'
+]);
+
 export function generateCsrfToken(): string {
   return randomBytes(32).toString('hex');
 }
@@ -33,6 +49,10 @@ export function csrfProtection(
   next: NextFunction
 ) {
   if (!UNSAFE_METHODS.has(req.method)) {
+    return next();
+  }
+
+  if (CSRF_EXEMPT_PATHS.has(req.path)) {
     return next();
   }
 

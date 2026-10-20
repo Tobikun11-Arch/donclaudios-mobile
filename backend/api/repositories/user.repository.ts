@@ -4,6 +4,12 @@ export const userRepository = {
   findByEmail: (email: string) =>
     UserModel.findOne({email: email.toLowerCase()}).exec(),
 
+  /** Matches a customer by email or by phone number. */
+  findByIdentifier: (identifier: string) =>
+    UserModel.findOne({
+      $or: [{email: identifier.toLowerCase()}, {phoneNumber: identifier}]
+    }).exec(),
+
   findById: (id: string) => UserModel.findById(id).exec(),
 
   listAll: () => UserModel.find({}).exec(),
@@ -23,9 +29,9 @@ export const userRepository = {
   updatePassword: (userId: string, passwordHash: string) =>
     UserModel.updateOne({_id: userId}, {passwordHash}).exec(),
 
-  setVerificationCode: (email: string, code: string, expiry: Date) =>
+  setVerificationCode: (userId: string, code: string, expiry: Date) =>
     UserModel.updateOne(
-      {email: email.toLowerCase()},
+      {_id: userId},
       {verificationCode: code, verificationExpiry: expiry}
     ).exec(),
 
@@ -35,21 +41,21 @@ export const userRepository = {
       {verificationCode: null, verificationExpiry: null}
     ).exec(),
 
-  setResetCode: (email: string, code: string, expiry: Date) =>
+  setResetCode: (userId: string, code: string, expiry: Date) =>
     UserModel.updateOne(
-      {email: email.toLowerCase()},
+      {_id: userId},
       {resetCode: code, resetExpiry: expiry}
     ).exec(),
 
-  clearResetCode: (email: string) =>
+  clearResetCode: (userId: string) =>
     UserModel.updateOne(
-      {email: email.toLowerCase()},
+      {_id: userId},
       {resetCode: null, resetExpiry: null}
     ).exec(),
 
-  markVerified: (email: string) =>
+  markVerified: (userId: string) =>
     UserModel.updateOne(
-      {email: email.toLowerCase()},
+      {_id: userId},
       {isVerified: true, verificationCode: null, verificationExpiry: null}
     ).exec()
 };

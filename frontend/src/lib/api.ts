@@ -1,4 +1,5 @@
 import { API_BASE_URL } from './config';
+import { tokenStore } from './token-store';
 
 export class ApiError extends Error {
   status: number;
@@ -43,15 +44,35 @@ async function refreshTokens(): Promise<boolean> {
     return refreshing;
   }
 
+  const refreshToken = tokenStore.refresh;
+  if (!refreshToken) {
+    return false;
+  }
+
   refreshing = (async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
         credentials: 'include'
       });
 
-      return res.ok;
+      if (!res.ok) {
+        return false;
+      }
+
+      const data = (await res.json()) as {
+        accessToken?: string;
+        refreshToken?: string;
+      };
+
+      if (data?.accessToken) {
+        await tokenStore.set(data.accessToken, data.refreshToken ?? refreshToken);
+        return true;
+      }
+
+      return false;
     } catch {
       return false;
     } finally {
@@ -72,6 +93,11 @@ async function request<T>(
     'Content-Type': 'application/json'
   };
 
+  const token = tokenStore.access;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
@@ -84,6 +110,7 @@ async function request<T>(
     if (refreshed) {
       return request<T>(method, path, body, false);
     }
+    await tokenStore.clear();
   }
 
   if (!res.ok) {

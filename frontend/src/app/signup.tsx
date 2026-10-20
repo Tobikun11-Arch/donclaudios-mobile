@@ -67,7 +67,9 @@ export default function SignUpScreen() {
         phoneNumber: phoneNumber.trim(),
         address: address.trim()
       });
-      router.push(`/verify-phone?phone=${encodeURIComponent(phoneNumber.trim())}`);
+      router.push(
+        `/verify-phone?phone=${encodeURIComponent(phoneNumber.trim())}&email=${encodeURIComponent(email.trim())}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
