@@ -27,6 +27,7 @@ export default function SignUpScreen() {
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [address, setAddress] = useState('');
@@ -39,6 +40,7 @@ export default function SignUpScreen() {
     const validationError = firstError(
       validateRequired(firstName, 'First name'),
       validateRequired(lastName, 'Last name'),
+      validateRequired(username, 'Username'),
       validateEmail(email),
       validateRequired(phoneNumber, 'Phone number'),
       validateRequired(address, 'Address'),
@@ -59,6 +61,7 @@ export default function SignUpScreen() {
       await signUp({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        username: username.trim(),
         email: email.trim(),
         password,
         phoneNumber: phoneNumber.trim(),
@@ -89,6 +92,7 @@ export default function SignUpScreen() {
       <View style={styles.form}>
         <FormField label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" />
         <FormField label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" />
+        <FormField label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
         <FormField label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoComplete="email" />
         <FormField label="Phone number" value={phoneNumber} onChangeText={setPhoneNumber} placeholder="09xxxxxxxxx" keyboardType="phone-pad" />
         <FormField label="Address" value={address} onChangeText={setAddress} placeholder="House no., street, barangay, city" />

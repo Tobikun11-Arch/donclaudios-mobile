@@ -34,6 +34,7 @@ type SignUpParams = {
   password: string;
   phoneNumber: string;
   address: string;
+  username?: string;
 };
 
 type AuthContextValue = {
@@ -43,6 +44,8 @@ type AuthContextValue = {
   signUp: (params: SignUpParams) => Promise<void>;
   verify: (phoneNumber: string, code: string) => Promise<void>;
   resendVerification: (phoneNumber: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -108,6 +111,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.post('/api/auth/resend-verification', { phoneNumber });
   }, []);
 
+  const forgotPassword = useCallback(async (email: string) => {
+    await api.post('/api/auth/forgot-password', { email });
+  }, []);
+
+  const resetPassword = useCallback(
+    async (email: string, code: string, newPassword: string) => {
+      await api.post('/api/auth/reset-password', { email, code, newPassword });
+    },
+    []
+  );
+
   const signOut = useCallback(async () => {
     try {
       await api.post('/api/auth/logout');
@@ -126,10 +140,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       verify,
       resendVerification,
+      forgotPassword,
+      resetPassword,
       signOut,
       refreshUser
     }),
-    [status, user, signIn, signUp, verify, resendVerification, signOut, refreshUser]
+    [
+      status,
+      user,
+      signIn,
+      signUp,
+      verify,
+      resendVerification,
+      forgotPassword,
+      resetPassword,
+      signOut,
+      refreshUser
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
