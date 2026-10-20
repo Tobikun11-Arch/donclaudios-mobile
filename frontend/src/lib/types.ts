@@ -234,3 +234,37 @@ export type SupportMessage = {
   authorType?: 'customer' | 'admin';
   createdAt: string;
 };
+
+export type Cashier = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  username?: string;
+  phoneNumber?: string;
+  address?: string;
+  isVerified?: boolean;
+  isOnline?: boolean;
+  createdAt?: string;
+};
+
+export type Ingredient = {
+  _id: string;
+  key?: string;
+  name: string;
+  iconKey?: string;
+  status?: 'active' | 'pending';
+};
+
+export type StockMovement = {
+  _id: string;
+  productId: { _id: string; name: string } | null;
+  type: 'restock' | 'adjustment';
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason?: 'spoilage' | 'adjustment';
+  note?: string;
+  performedBy?: { _id: string; firstName: string; lastName: string } | null;
+  createdAt: string;
+};
